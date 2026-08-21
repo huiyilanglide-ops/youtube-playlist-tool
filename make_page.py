@@ -158,9 +158,7 @@ TEMPLATE = Template(r"""<!doctype html>
     右上の <b>&#8943;</b> から「ブラウザで開く」を選んでください。
   </div>
 
-  <a class="btn primary" id="btnMusic" href="$music_url">
-    <span class="ico">&#9654;</span><span>$btn_label</span>
-  </a>
+$buttons
 
   <p class="hint" id="hint">$hint</p>
 
@@ -186,8 +184,7 @@ $setup
 (function () {
   "use strict";
 
-  var MUSIC_URL = "$music_url_js";
-  var YTM_PKG   = "com.google.android.apps.youtube.music";
+  var YTM_PKG = "com.google.android.apps.youtube.music";
 
   var ua    = navigator.userAgent || "";
   var inApp = /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|Twitter|KAKAOTALK|MicroMessenger|TikTok/i.test(ua);
@@ -200,12 +197,11 @@ $setup
              "#Intent;scheme=https;package=" + YTM_PKG +
              ";S.browser_fallback_url=" + encodeURIComponent(httpsUrl) + ";end";
     };
-    var main = document.getElementById("btnMusic");
-    main.href = toIntent(MUSIC_URL);
-
-    var rows = document.querySelectorAll(".track a");
-    for (var i = 0; i < rows.length; i++) {
-      rows[i].href = toIntent(rows[i].href);
+    // YouTube Music 向けのリンクだけを intent 化する。
+    // 初回セットアップ用の YouTube リンクはそのまま残す。
+    var links = document.querySelectorAll('a[href^="https://music.youtube.com"]');
+    for (var i = 0; i < links.length; i++) {
+      links[i].href = toIntent(links[i].href);
     }
   }
 
@@ -326,9 +322,15 @@ def main(argv=None) -> int:
     resolved = normalize_id(data.get("resolved_playlist_id"))
     playlist_id = manual or resolved
 
+    def button(href: str, label: str, primary: bool = True) -> str:
+        cls = "btn primary" if primary else "btn ghost"
+        return (f'  <a class="{cls}" href="{esc(href)}">'
+                f'<span class="ico">&#9654;</span><span>{esc(label)}</span></a>')
+
     if manual:
         # 保存済みプレイリストの ID。YouTube Music が確実に開ける唯一の形。
         music_url = f"{MUSIC}/playlist?list={playlist_id}"
+        buttons = button(music_url, "YouTube Music で開く")
         setup = ""
         hint = "YouTube Music アプリが入っていればアプリで開きます。"
         mode = "固定プレイリスト"
@@ -337,13 +339,16 @@ def main(argv=None) -> int:
         # www.youtube.com に転送されてしまう。ここでは 1 曲目だけを開き、
         # プレイリスト化は保存用リンクからの初回セットアップに任せる。
         first = next((str(m.get("videoId")) for m in found if m.get("videoId")), "")
-        music_url = f"{MUSIC}/watch?v={first}"
         ids = ",".join(str(m.get("videoId") or "") for m in found if m.get("videoId"))
         save_url = (f"https://www.youtube.com/playlist?list={resolved}" if resolved
                     else f"https://www.youtube.com/watch_videos?video_ids={ids}")
+        buttons = "\n".join([
+            button(save_url, "プレイリストを作成（初回のみ）"),
+            button(f"{MUSIC}/watch?v={first}", "1曲目だけ再生する", primary=False),
+        ])
         setup = SETUP_BOX.replace("{save_url}", esc(save_url))
-        hint = "いまは1曲目が開きます。下の曲名でも1曲ずつ開けます。"
-        mode = "1曲目のみ(要セットアップ)"
+        hint = "プレイリスト全体を共有するには、上のボタンで一度だけ作成してください。"
+        mode = "要セットアップ"
 
     stamp = f"{len(found)} 曲 / 自動生成"
 
@@ -354,9 +359,7 @@ def main(argv=None) -> int:
         accent2=esc(cfg.get("accent2") or "#7b5cff"),
         count=len(found),
         tracks=build_tracks(found),
-        music_url=esc(music_url),
-        btn_label=esc("YouTube Music で開く" if manual else "YouTube Music で再生"),
-        music_url_js=js_str(music_url),
+        buttons=buttons,
         hint=esc(hint),
         setup=setup,
         generated=esc(stamp),
