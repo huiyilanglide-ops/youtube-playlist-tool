@@ -159,7 +159,7 @@ TEMPLATE = Template(r"""<!doctype html>
   </div>
 
   <a class="btn primary" id="btnMusic" href="$music_url">
-    <span class="ico">&#9654;</span><span>YouTube Music で開く</span>
+    <span class="ico">&#9654;</span><span>$btn_label</span>
   </a>
 
   <p class="hint" id="hint">$hint</p>
@@ -244,15 +244,16 @@ $setup
 """)
 
 SETUP_BOX = """  <div class="setup">
-    <b>固定リンクにするには</b>
-    いまのリンクはその場かぎりのプレイリストです。
-    一度 YouTube Music で「保存」しておくと、URL が固定されて共有にも向きます。
+    <b>プレイリストとして開くには（初回だけ）</b>
+    YouTube Music は「その場かぎりのプレイリスト」を開けません。
+    保存済みプレイリストの ID が要ります。取得は一度だけです。
     <ol>
-      <li>上のボタンで開く</li>
+      <li><a href="{save_url}">この保存用リンク</a>を開く（ここだけ YouTube 側です）</li>
       <li>プレイリスト名の横の「保存」をタップ</li>
       <li>保存したものを開き、URL の <code>list=</code> 以降をコピー</li>
       <li><code>page.json</code> の <code>playlist_id</code> に貼って commit</li>
     </ol>
+    これで上のボタンが YouTube Music アプリを直接開くようになります。
   </div>"""
 
 
@@ -325,20 +326,24 @@ def main(argv=None) -> int:
     resolved = normalize_id(data.get("resolved_playlist_id"))
     playlist_id = manual or resolved
 
-    if playlist_id:
+    if manual:
+        # 保存済みプレイリストの ID。YouTube Music が確実に開ける唯一の形。
         music_url = f"{MUSIC}/playlist?list={playlist_id}"
-        setup = "" if manual else SETUP_BOX
-        hint = ("YouTube Music アプリが入っていればアプリで開きます。"
-                if manual else
-                "このリンクは一時プレイリストです。保存すると固定できます。")
-        mode = "固定プレイリスト" if manual else "自動解決したプレイリスト"
+        setup = ""
+        hint = "YouTube Music アプリが入っていればアプリで開きます。"
+        mode = "固定プレイリスト"
     else:
-        # ID を解決できなかった場合でも music.youtube.com に投げる
+        # 一時プレイリスト(TLGG...)も watch_videos も YouTube Music では開けず、
+        # www.youtube.com に転送されてしまう。ここでは 1 曲目だけを開き、
+        # プレイリスト化は保存用リンクからの初回セットアップに任せる。
+        first = next((str(m.get("videoId")) for m in found if m.get("videoId")), "")
+        music_url = f"{MUSIC}/watch?v={first}"
         ids = ",".join(str(m.get("videoId") or "") for m in found if m.get("videoId"))
-        music_url = f"{MUSIC}/watch_videos?video_ids={ids}"
-        setup = SETUP_BOX
-        hint = "うまく開かない場合は、下の曲名をタップすると1曲ずつ開けます。"
-        mode = "watch_videos 直接"
+        save_url = (f"https://www.youtube.com/playlist?list={resolved}" if resolved
+                    else f"https://www.youtube.com/watch_videos?video_ids={ids}")
+        setup = SETUP_BOX.replace("{save_url}", esc(save_url))
+        hint = "いまは1曲目が開きます。下の曲名でも1曲ずつ開けます。"
+        mode = "1曲目のみ(要セットアップ)"
 
     stamp = f"{len(found)} 曲 / 自動生成"
 
@@ -350,6 +355,7 @@ def main(argv=None) -> int:
         count=len(found),
         tracks=build_tracks(found),
         music_url=esc(music_url),
+        btn_label=esc("YouTube Music で開く" if manual else "YouTube Music で再生"),
         music_url_js=js_str(music_url),
         hint=esc(hint),
         setup=setup,

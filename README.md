@@ -54,14 +54,19 @@ https://huiyilanglide-ops.github.io/youtube-playlist-tool/
 
 ### リンクの決まり方
 
-| 優先 | 条件 | リンク |
-|---:|---|---|
-| 1 | `page.json` の `playlist_id` あり | `music.youtube.com/playlist?list=...` |
-| 2 | `resolve_playlist.py` が ID を解決できた | `music.youtube.com/playlist?list=...`(一時) |
-| 3 | どちらも無い | `music.youtube.com/watch_videos?video_ids=...` |
+| 条件 | ボタンのリンク |
+|---|---|
+| `page.json` に `playlist_id` あり | `music.youtube.com/playlist?list=...`（プレイリスト全体） |
+| まだ無い | `music.youtube.com/watch?v=...`（1曲目）＋ セットアップ案内 |
 
-`resolve_playlist.py` は `watch_videos` のリダイレクト先 URL に含まれる
-`list=` を拾ってプレイリスト ID にします。失敗しても実行は止まりません。
+**YouTube Music は「その場かぎりのプレイリスト」を開けません。**
+`watch_videos` は YouTube 専用の仕組みで、`music.youtube.com` に投げても
+`www.youtube.com` に転送されます。一時プレイリスト（`TLGG...`）も同様です。
+そのため保存済みプレイリストの ID が無いあいだは、プレイリストのふりをせず
+1曲目を開く動作にしています。
+
+`resolve_playlist.py` が解決した一時 ID は、ボタンには使わず
+セットアップ案内の「保存用リンク」にだけ使います。
 
 見た目は `page.json` で変えられます。
 
