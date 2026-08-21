@@ -14,6 +14,7 @@ on:
       - ytm_playlist.py
       - to_summary.py
       - make_page.py
+      - resolve_playlist.py
       - songs.txt
       - page.json
       - .github/workflows/playlist.yml
@@ -57,6 +58,12 @@ jobs:
       - name: サマリーに結果を出力
         if: always()
         run: python to_summary.py >> "$GITHUB_STEP_SUMMARY"
+
+      # watch_videos のリダイレクト先から list= を拾い、
+      # music.youtube.com のリンクを作れるようにする。取れなくても続行。
+      - name: プレイリスト ID を解決
+        continue-on-error: true
+        run: python resolve_playlist.py --results out/results.json
 
       - name: ランディングページを生成
         env:

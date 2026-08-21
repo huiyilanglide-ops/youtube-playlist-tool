@@ -3,8 +3,8 @@
 """
 ytm_playlist.py の結果からスマートリンク用のランディングページを生成する。
 
-ボタンを押すと YouTube Music アプリでプレイリストが開くページを
-1 枚の HTML(外部ファイル依存なし)として出力する。
+リンク先はすべて music.youtube.com に統一している。
+YouTube(www.youtube.com)には飛ばさない。
 
     python make_page.py --results out/results.json --config page.json --out site/index.html
 """
@@ -17,6 +17,8 @@ import os
 import sys
 from string import Template
 from typing import Dict, List
+
+MUSIC = "https://music.youtube.com"
 
 TEMPLATE = Template(r"""<!doctype html>
 <html lang="ja">
@@ -92,18 +94,20 @@ TEMPLATE = Template(r"""<!doctype html>
     border: 0; border-radius: 15px;
     font-size: 16px; font-weight: 700; font-family: inherit;
     text-decoration: none; cursor: pointer;
-    transition: transform .12s ease, opacity .12s ease;
+    transition: transform .12s ease;
   }
   .btn:active { transform: scale(.977); }
   .btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
                  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 34%, transparent); }
   .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
-  .btn[hidden] { display: none; }
   .btn .ico { font-size: 18px; line-height: 1; }
+
+  .hint { margin: 2px 0 20px; text-align: center; font-size: 12px; color: var(--muted); }
+  .hint a { color: var(--muted); }
 
   .setup {
     background: var(--card); border: 1px solid var(--line);
-    border-radius: 15px; padding: 15px 17px; margin-bottom: 11px;
+    border-radius: 15px; padding: 15px 17px; margin: 20px 0 0;
     font-size: 13px; color: var(--muted);
   }
   .setup b { color: var(--text); display: block; margin-bottom: 6px; font-size: 14px; }
@@ -114,15 +118,19 @@ TEMPLATE = Template(r"""<!doctype html>
 
   .tracks { list-style: none; margin: 30px 0 0; padding: 0;
             background: var(--card); border: 1px solid var(--line); border-radius: 17px; overflow: hidden; }
-  .track { display: flex; align-items: center; gap: 14px; padding: 13px 17px; border-bottom: 1px solid var(--line); }
+  .track { border-bottom: 1px solid var(--line); }
   .track:last-child { border-bottom: 0; }
+  .track a { display: flex; align-items: center; gap: 14px; padding: 13px 17px;
+             text-decoration: none; color: inherit; }
+  .track a:active { background: rgba(255,255,255,.05); }
   .num { width: 20px; flex: none; text-align: right; color: var(--muted);
          font-size: 13px; font-variant-numeric: tabular-nums; }
-  .meta { min-width: 0; }
+  .meta { min-width: 0; flex: 1; }
   .t { display: block; font-size: 15px; font-weight: 600;
        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .a { display: block; font-size: 12.5px; color: var(--muted);
        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .play { flex: none; color: var(--muted); font-size: 13px; }
 
   footer { margin-top: 26px; text-align: center; color: var(--muted); font-size: 11.5px; line-height: 1.7; }
   footer a { color: var(--muted); }
@@ -142,7 +150,7 @@ TEMPLATE = Template(r"""<!doctype html>
   <div class="art">&#9835;</div>
   <h1>$title</h1>
   <p class="sub">$subtitle</p>
-  <p class="count">$count曲</p>
+  <p class="count">$count曲 &middot; YouTube Music</p>
 
   <div class="notice" id="inapp">
     <b>アプリ内ブラウザで開いています</b><br>
@@ -150,27 +158,11 @@ TEMPLATE = Template(r"""<!doctype html>
     右上の <b>&#8943;</b> から「ブラウザで開く」を選んでください。
   </div>
 
-  <a class="btn primary" id="btnMusic" href="#" hidden>
+  <a class="btn primary" id="btnMusic" href="$music_url">
     <span class="ico">&#9654;</span><span>YouTube Music で開く</span>
   </a>
-  <a class="btn ghost" id="btnYt" href="#" hidden>
-    <span class="ico">&#9654;</span><span>YouTube で開く</span>
-  </a>
 
-  <div class="setup" id="setup" hidden>
-    <b>もう一手間だけ必要です</b>
-    下のボタンでプレイリストを開いて保存すると、YouTube Music アプリで直接開けるようになります。
-    <ol>
-      <li>下のボタンを押す（YouTube が開きます）</li>
-      <li>プレイリスト名の横の「保存」をタップ</li>
-      <li>保存したプレイリストを開き、URL の <code>list=</code> 以降をコピー</li>
-      <li>リポジトリの <code>page.json</code> の <code>playlist_id</code> に貼り付けて commit</li>
-    </ol>
-  </div>
-
-  <a class="btn primary" id="btnWatch" href="#" hidden>
-    <span class="ico">&#9654;</span><span>YouTube で開いて保存する</span>
-  </a>
+  <p class="hint" id="hint">$hint</p>
 
   <button class="btn ghost" id="btnCopy" type="button">
     <span class="ico">&#128279;</span><span>リンクをコピー</span>
@@ -179,6 +171,8 @@ TEMPLATE = Template(r"""<!doctype html>
   <ol class="tracks">
 $tracks
   </ol>
+
+$setup
 
   <footer>
     $generated<br>
@@ -192,44 +186,27 @@ $tracks
 (function () {
   "use strict";
 
-  var PLAYLIST_ID = "$playlist_id";
-  var WATCH_URL   = "$watch_url";
-  var YTM_PKG     = "com.google.android.apps.youtube.music";
-  var YT_PKG      = "com.google.android.youtube";
+  var MUSIC_URL = "$music_url_js";
+  var YTM_PKG   = "com.google.android.apps.youtube.music";
 
-  var ua       = navigator.userAgent || "";
-  var isAndroid = /Android/i.test(ua);
-  var inApp     = /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|Twitter|KAKAOTALK|MicroMessenger|TikTok/i.test(ua);
+  var ua    = navigator.userAgent || "";
+  var inApp = /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|Twitter|KAKAOTALK|MicroMessenger|TikTok/i.test(ua);
 
-  // Android は intent:// で対象アプリを名指しすると確実に開く。
-  // 開けなければ browser_fallback_url でブラウザに戻る。
-  function intentUrl(httpsUrl, pkg) {
-    return "intent://" + httpsUrl.replace(/^https:\/\//, "") +
-           "#Intent;scheme=https;package=" + pkg +
-           ";S.browser_fallback_url=" + encodeURIComponent(httpsUrl) + ";end";
-  }
+  // Android は intent:// でアプリを名指しすると確実に開く。
+  // 開けなければ browser_fallback_url でブラウザ版 YouTube Music に戻る。
+  if (/Android/i.test(ua)) {
+    var toIntent = function (httpsUrl) {
+      return "intent://" + httpsUrl.replace(/^https:\/\//, "") +
+             "#Intent;scheme=https;package=" + YTM_PKG +
+             ";S.browser_fallback_url=" + encodeURIComponent(httpsUrl) + ";end";
+    };
+    var main = document.getElementById("btnMusic");
+    main.href = toIntent(MUSIC_URL);
 
-  function show(el) { if (el) el.hidden = false; }
-
-  var btnMusic = document.getElementById("btnMusic");
-  var btnYt    = document.getElementById("btnYt");
-  var btnWatch = document.getElementById("btnWatch");
-  var setup    = document.getElementById("setup");
-
-  var shareUrl = location.href.split("#")[0];
-
-  if (PLAYLIST_ID) {
-    var musicUrl = "https://music.youtube.com/playlist?list=" + PLAYLIST_ID;
-    var ytUrl    = "https://www.youtube.com/playlist?list=" + PLAYLIST_ID;
-    btnMusic.href = isAndroid ? intentUrl(musicUrl, YTM_PKG) : musicUrl;
-    btnYt.href    = isAndroid ? intentUrl(ytUrl, YT_PKG) : ytUrl;
-    show(btnMusic);
-    show(btnYt);
-  } else {
-    // 保存済みプレイリストがまだ無い状態。watch_videos で作るところから案内する。
-    btnWatch.href = WATCH_URL;
-    show(setup);
-    show(btnWatch);
+    var rows = document.querySelectorAll(".track a");
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].href = toIntent(rows[i].href);
+    }
   }
 
   if (inApp) document.getElementById("inapp").className = "notice show";
@@ -242,6 +219,7 @@ $tracks
   }
 
   document.getElementById("btnCopy").addEventListener("click", function () {
+    var shareUrl = location.href.split("#")[0];
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(shareUrl).then(
         function () { flash("コピーしました"); },
@@ -265,6 +243,18 @@ $tracks
 </html>
 """)
 
+SETUP_BOX = """  <div class="setup">
+    <b>固定リンクにするには</b>
+    いまのリンクはその場かぎりのプレイリストです。
+    一度 YouTube Music で「保存」しておくと、URL が固定されて共有にも向きます。
+    <ol>
+      <li>上のボタンで開く</li>
+      <li>プレイリスト名の横の「保存」をタップ</li>
+      <li>保存したものを開き、URL の <code>list=</code> 以降をコピー</li>
+      <li><code>page.json</code> の <code>playlist_id</code> に貼って commit</li>
+    </ol>
+  </div>"""
+
 
 def esc(s: object) -> str:
     return html.escape(str(s if s is not None else ""), quote=True)
@@ -281,15 +271,28 @@ def js_str(s: object) -> str:
 def build_tracks(found: List[Dict]) -> str:
     rows = []
     for i, m in enumerate(found, 1):
+        vid = str(m.get("videoId") or "")
+        href = f"{MUSIC}/watch?v={esc(vid)}" if vid else "#"
         rows.append(
             '    <li class="track">'
+            f'<a href="{href}">'
             f'<span class="num">{i}</span>'
             '<span class="meta">'
             f'<span class="t">{esc(m.get("title"))}</span>'
             f'<span class="a">{esc(m.get("artists"))}</span>'
-            '</span></li>'
+            '</span>'
+            '<span class="play">&#9654;</span>'
+            '</a></li>'
         )
     return "\n".join(rows)
+
+
+def normalize_id(value: str) -> str:
+    """URL ごと貼られても list= 以降を拾う。"""
+    value = str(value or "").strip()
+    if "list=" in value:
+        value = value.split("list=", 1)[1].split("&", 1)[0]
+    return value
 
 
 def main(argv=None) -> int:
@@ -302,15 +305,13 @@ def main(argv=None) -> int:
 
     if not os.path.exists(args.results):
         print(f"エラー: 結果ファイルがありません: {args.results}", file=sys.stderr)
-        print("先に ytm_playlist.py を実行してください。", file=sys.stderr)
         return 1
 
     with open(args.results, encoding="utf-8") as fh:
         data = json.load(fh)
 
     found = data.get("found") or []
-    urls = data.get("urls") or []
-    if not found or not urls:
+    if not found:
         print("エラー: videoId が 1 件も無いためページを生成できません。", file=sys.stderr)
         return 1
 
@@ -319,13 +320,27 @@ def main(argv=None) -> int:
         with open(args.config, encoding="utf-8") as fh:
             cfg = json.load(fh)
 
-    playlist_id = str(cfg.get("playlist_id") or "").strip()
-    # URL ごと貼られても動くように list= 以降を拾う
-    if "list=" in playlist_id:
-        playlist_id = playlist_id.split("list=", 1)[1].split("&", 1)[0]
+    # 優先順位: page.json の手動指定 > 自動解決した ID
+    manual = normalize_id(cfg.get("playlist_id"))
+    resolved = normalize_id(data.get("resolved_playlist_id"))
+    playlist_id = manual or resolved
 
-    generated = data.get("generated_at") or ""
-    stamp = f"{len(found)} 曲 / 自動生成{(' · ' + generated) if generated else ''}"
+    if playlist_id:
+        music_url = f"{MUSIC}/playlist?list={playlist_id}"
+        setup = "" if manual else SETUP_BOX
+        hint = ("YouTube Music アプリが入っていればアプリで開きます。"
+                if manual else
+                "このリンクは一時プレイリストです。保存すると固定できます。")
+        mode = "固定プレイリスト" if manual else "自動解決したプレイリスト"
+    else:
+        # ID を解決できなかった場合でも music.youtube.com に投げる
+        ids = ",".join(str(m.get("videoId") or "") for m in found if m.get("videoId"))
+        music_url = f"{MUSIC}/watch_videos?video_ids={ids}"
+        setup = SETUP_BOX
+        hint = "うまく開かない場合は、下の曲名をタップすると1曲ずつ開けます。"
+        mode = "watch_videos 直接"
+
+    stamp = f"{len(found)} 曲 / 自動生成"
 
     page = TEMPLATE.substitute(
         title=esc(cfg.get("title") or "My Playlist"),
@@ -334,19 +349,19 @@ def main(argv=None) -> int:
         accent2=esc(cfg.get("accent2") or "#7b5cff"),
         count=len(found),
         tracks=build_tracks(found),
-        playlist_id=js_str(playlist_id),
-        watch_url=js_str(urls[0]),
+        music_url=esc(music_url),
+        music_url_js=js_str(music_url),
+        hint=esc(hint),
+        setup=setup,
         generated=esc(stamp),
         repo=esc(args.repo),
     )
 
-    out_dir = os.path.dirname(os.path.abspath(args.out))
-    os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as fh:
         fh.write(page)
 
-    mode = "アプリ直接オープン" if playlist_id else "保存フロー案内"
-    print(f"生成しました: {args.out} ({len(found)} 曲 / モード: {mode})")
+    print(f"生成しました: {args.out} ({len(found)} 曲 / リンク: {mode})")
     return 0
 
 

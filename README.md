@@ -42,11 +42,26 @@ https://huiyilanglide-ops.github.io/youtube-playlist-tool/
 公開だけがスキップされ、サマリーに案内が出ます。
 生成済みの HTML は Artifacts の `playlist-results` → `site/index.html` から取り出せます。
 
-ページには曲目一覧と、**「YouTube Music で開く」ボタン**があります。
-Android では `intent://` でアプリを名指しして起動し、開けなければブラウザに戻ります。
-iOS ではユニバーサルリンクでアプリに切り替わります。
-Instagram や LINE のアプリ内ブラウザで開かれた場合は、
-アプリに切り替わらない旨の警告を出します。
+ページ内のリンクは**すべて `music.youtube.com`** です。
+`www.youtube.com`(= YouTube アプリ側)には飛ばしません。
+
+- 大きいボタン → プレイリストを YouTube Music で開く
+- 曲名をタップ → その曲を YouTube Music で開く
+- Android は `intent://` で `com.google.android.apps.youtube.music` を名指しして起動し、
+  アプリが無ければブラウザ版 YouTube Music に戻ります
+- iOS はユニバーサルリンクでアプリに切り替わります
+- Instagram や LINE のアプリ内ブラウザではアプリに切り替われないため、警告を表示します
+
+### リンクの決まり方
+
+| 優先 | 条件 | リンク |
+|---:|---|---|
+| 1 | `page.json` の `playlist_id` あり | `music.youtube.com/playlist?list=...` |
+| 2 | `resolve_playlist.py` が ID を解決できた | `music.youtube.com/playlist?list=...`(一時) |
+| 3 | どちらも無い | `music.youtube.com/watch_videos?video_ids=...` |
+
+`resolve_playlist.py` は `watch_videos` のリダイレクト先 URL に含まれる
+`list=` を拾ってプレイリスト ID にします。失敗しても実行は止まりません。
 
 見た目は `page.json` で変えられます。
 
@@ -59,11 +74,10 @@ Instagram や LINE のアプリ内ブラウザで開かれた場合は、
 
 ### アプリで開くボタンを有効にする
 
-`watch_videos` の URL は毎回その場かぎりのプレイリストを作る仕組みで、
-しかも `www.youtube.com` なので **YouTube アプリ**の側が開きます。
-YouTube Music アプリで開くには、一度だけ保存して固定の ID を得る必要があります。
+`watch_videos` の URL は毎回その場かぎりのプレイリストを作る仕組みです。
+共有用の固定リンクにするには、一度だけ保存して ID を控える必要があります。
 
-1. 公開ページの「YouTube で開いて保存する」を押す
+1. 公開ページの「YouTube Music で開く」を押す
 2. プレイリスト名の横の **「保存」** をタップ
 3. 保存されたプレイリストを開き、URL の `list=` 以降をコピー
    （`PL` から始まる文字列。URL をまるごと貼っても構いません）
