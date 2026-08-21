@@ -1,0 +1,18 @@
+# 曲リスト(1行1曲)
+#   書式: 曲名 / アーティスト1, アーティスト2
+#   「/」でアーティストを分けて書くと照合精度が上がります。
+#   曲名だけでも動きますが、同名異曲を掴む可能性が上がります。
+#   # で始まる行と空行は無視されます。
+#
+#   使い方: python ytm_playlist.py --songs songs.txt
+
+Closer / The Chainsmokers, Halsey
+Something Just Like This / The Chainsmokers, Coldplay
+Don't Let Me Down / The Chainsmokers, Daya
+Paris / The Chainsmokers
+It Ain't Me / Kygo, Selena Gomez
+Faded / Alan Walker
+7 Years / Lukas Graham
+Let Me Love You / DJ Snake, Justin Bieber
+Cold Water / Major Lazer, Justin Bieber
+Cheap Thrills / Sia

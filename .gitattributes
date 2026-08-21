@@ -1,0 +1,5 @@
+# run.bat は Shift_JIS(cp932) + CRLF。git による正規化を無効化する。
+run.bat -text
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
