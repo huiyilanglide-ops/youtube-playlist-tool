@@ -33,6 +33,8 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    outputs:
+      pages_ready: ${{ steps.pagescfg.outcome == 'success' }}
 
     steps:
       - uses: actions/checkout@v5
@@ -72,18 +74,44 @@ jobs:
             run.log
           if-no-files-found: warn
 
+      # Pages が未設定でも検索結果は失わないよう、ここから先は失敗を許容する。
       - name: Pages の設定
+        id: pagescfg
+        continue-on-error: true
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: ページをアップロード
+        if: steps.pagescfg.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
+      - name: Pages が未設定のときの案内
+        if: steps.pagescfg.outcome != 'success'
+        env:
+          SETTINGS_URL: ${{ github.server_url }}/${{ github.repository }}/settings/pages
+        run: |
+          {
+            echo "## ⚠️ ランディングページはまだ公開されていません"
+            echo ""
+            echo "GitHub Pages が有効になっていないため、公開だけスキップしました。"
+            echo "（プレイリストの URL は上に出ています。そちらは問題ありません）"
+            echo ""
+            echo "**一度だけ設定してください:**"
+            echo ""
+            echo "1. [$SETTINGS_URL]($SETTINGS_URL) を開く"
+            echo "2. **Build and deployment** の **Source** を **GitHub Actions** にする"
+            echo "3. Actions タブに戻って **Run workflow** を押す"
+            echo ""
+            echo "次回以降は自動で公開されます。"
+            echo ""
+            echo "生成済みのページは Artifacts の \`playlist-results\` の中の"
+            echo "\`site/index.html\` からも取り出せます。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     needs: generate
+    if: needs.generate.outputs.pages_ready == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write

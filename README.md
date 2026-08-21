@@ -29,6 +29,19 @@ GitHub Pages に公開します。
 https://huiyilanglide-ops.github.io/youtube-playlist-tool/
 ```
 
+### 最初に一度だけ: Pages を有効にする
+
+ワークフローの権限では Pages を自動で有効化できないため、
+最初の 1 回だけ手動で設定してください。
+
+1. [Settings → Pages](https://github.com/huiyilanglide-ops/youtube-playlist-tool/settings/pages) を開く
+2. **Build and deployment** の **Source** を **GitHub Actions** にする
+3. Actions タブで **Run workflow** を押す
+
+未設定のあいだも検索とプレイリスト URL の生成は普通に動きます。
+公開だけがスキップされ、サマリーに案内が出ます。
+生成済みの HTML は Artifacts の `playlist-results` → `site/index.html` から取り出せます。
+
 ページには曲目一覧と、**「YouTube Music で開く」ボタン**があります。
 Android では `intent://` でアプリを名指しして起動し、開けなければブラウザに戻ります。
 iOS ではユニバーサルリンクでアプリに切り替わります。
