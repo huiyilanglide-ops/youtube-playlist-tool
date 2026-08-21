@@ -20,6 +20,55 @@
 
 認証は不要です(検索のみ使用)。
 
+## スマホから実行する(PC が無いとき)
+
+### 方法 1: GitHub Actions(おすすめ・タップだけ)
+
+このリポジトリの **Actions** タブ → 左の **「プレイリスト URL 生成」** →
+右上の **「Run workflow」** をタップするだけです。1 分ほどで終わります。
+
+終わったら実行結果を開くと、**Summary** に
+
+- タップできるプレイリストのリンク
+- 曲名 / アーティスト / videoId の一覧
+- 見つからなかった曲
+
+が表示されます。コピー用の URL も置いてあります。
+
+曲を変えたいときは、GitHub の画面で `songs.txt` を編集して commit するだけです。
+push をきっかけにワークフローが自動で再実行されます。
+
+### 方法 2: Google Colab(ブラウザで実行)
+
+[colab.research.google.com](https://colab.research.google.com) を開き、
+新しいノートブックに次を貼り付けて実行(▶)します。
+
+```python
+!pip install -q ytmusicapi
+!curl -sLO https://raw.githubusercontent.com/huiyilanglide-ops/youtube-playlist-tool/claude/youtube-music-playlist-url-mvqupl/ytm_playlist.py
+!curl -sLO https://raw.githubusercontent.com/huiyilanglide-ops/youtube-playlist-tool/claude/youtube-music-playlist-url-mvqupl/songs.txt
+!python ytm_playlist.py --songs songs.txt
+```
+
+### 方法 3: Termux(Android)
+
+```bash
+pkg install python git -y
+git clone https://github.com/huiyilanglide-ops/youtube-playlist-tool
+cd youtube-playlist-tool
+pip install ytmusicapi
+python ytm_playlist.py --songs songs.txt
+```
+
+### スマホで URL を開くときの注意
+
+`watch_videos` のリンクは YouTube アプリが横取りして正しく開けないことがあります。
+うまくいかない場合はリンクを長押しして **ブラウザで開く**、または
+ブラウザの **PC 版サイトを見る** をオンにしてください。
+
+再生が始まったら「保存」でライブラリに入れておくと、YouTube Music 側の
+ライブラリからも参照できます(ライブラリは両者で共有されます)。
+
 ## 使い方(Windows)
 
 `run.bat` をダブルクリックするだけです。以下を自動で行います。
