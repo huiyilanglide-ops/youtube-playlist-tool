@@ -21,6 +21,7 @@ on:
       - make_page.py
       - resolve_playlist.py
       - set_playlist.py
+      - sync_playlist.py
       - songs.txt
       - page.json
       - .github/workflows/playlist.yml
@@ -42,6 +43,8 @@ jobs:
       id-token: write
     outputs:
       pages_ready: ${{ steps.pagescfg.outcome == 'success' }}
+    env:
+      HAS_AUTH: ${{ secrets.YTM_OAUTH_JSON != '' }}
 
     steps:
       - uses: actions/checkout@v5
@@ -75,6 +78,17 @@ jobs:
 
       # watch_videos のリダイレクト先から list= を拾い、
       # music.youtube.com のリンクを作れるようにする。取れなくても続行。
+      # 認証情報が登録されていれば、YouTube Music に本物のプレイリストを
+      # 作成/更新して page.json に ID を書き戻す。未登録ならスキップ。
+      - name: YouTube Music にプレイリストを作成/更新
+        if: env.HAS_AUTH == 'true'
+        continue-on-error: true
+        env:
+          YTM_CLIENT_ID: ${{ secrets.YTM_CLIENT_ID }}
+          YTM_CLIENT_SECRET: ${{ secrets.YTM_CLIENT_SECRET }}
+          YTM_OAUTH_JSON: ${{ secrets.YTM_OAUTH_JSON }}
+        run: python sync_playlist.py --results out/results.json --config page.json
+
       - name: プレイリスト ID を解決
         continue-on-error: true
         run: python resolve_playlist.py --results out/results.json
@@ -85,7 +99,6 @@ jobs:
         run: python make_page.py --results out/results.json --config page.json --out site/index.html
 
       - name: page.json をコミット
-        if: inputs.playlist_url != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -93,7 +106,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "変更なし"
           else
-            git commit -m "Set playlist id from workflow input [skip ci]"
+            git commit -m "Update playlist id [skip ci]"
             git push
           fi
 

@@ -20,6 +20,71 @@
 
 認証は不要です(検索のみ使用)。
 
+## プレイリスト作成を自動化する（推奨・初回だけ設定）
+
+認証情報を登録しておくと、ワークフローが **YouTube Music に本物のプレイリストを
+作成・更新**します。`songs.txt` を変えれば中身も自動で追従します。
+YouTube 側で「保存」する手作業は不要になります。
+
+プレイリスト ID は変えずに差分だけ反映するので、**共有リンクは切れません**。
+
+### 1. Google Cloud で OAuth クライアントを作る
+
+[console.cloud.google.com](https://console.cloud.google.com) をスマホのブラウザで開いて:
+
+1. プロジェクトを作成
+2. **YouTube Data API v3** を有効化
+3. **OAuth 同意画面** → 外部 → テストユーザーに自分の Google アカウントを追加
+4. **認証情報** → 認証情報を作成 → **OAuth クライアント ID**
+   → アプリケーションの種類は **「テレビとリミット入力デバイス」**
+5. 表示された **クライアント ID** と **クライアント シークレット** を控える
+
+### 2. トークンを取る（Colab でできます）
+
+[colab.research.google.com](https://colab.research.google.com) で新規ノートブックを作り、
+`XXX` / `YYY` を差し替えて実行します。
+
+```python
+!pip install -q ytmusicapi
+!curl -sLO https://raw.githubusercontent.com/huiyilanglide-ops/youtube-playlist-tool/claude/youtube-music-playlist-url-mvqupl/ytm_auth.py
+!python ytm_auth.py --client-id "XXX" --client-secret "YYY"
+```
+
+URL とコードが表示されるので、ブラウザで承認してください。
+承認が終わると JSON が 1 行で出力されます。
+
+> **この JSON は YouTube アカウントへのアクセス権そのものです。**
+> 公開の場所（Issue、SNS、Actions のログ）には絶対に貼らないでください。
+
+### 3. GitHub に Secret を 3 つ登録
+
+[Settings → Secrets and variables → Actions](https://github.com/huiyilanglide-ops/youtube-playlist-tool/settings/secrets/actions)
+→ **New repository secret**
+
+| 名前 | 中身 |
+|---|---|
+| `YTM_CLIENT_ID` | 手順 1 のクライアント ID |
+| `YTM_CLIENT_SECRET` | 手順 1 のクライアント シークレット |
+| `YTM_OAUTH_JSON` | 手順 2 で出力された JSON（1 行まるごと） |
+
+Secret はリポジトリが public でも中身は公開されません。
+このワークフローは `push`（指定ブランチ）と手動実行でしか動かず、
+fork からの PR には Secret が渡らないため、外部から悪用される経路はありません。
+
+### 4. 実行
+
+[Run workflow](https://github.com/huiyilanglide-ops/youtube-playlist-tool/actions/workflows/playlist.yml)
+を押すだけです。プレイリストが作成され、その ID が `page.json` に自動でコミットされ、
+ランディングページのボタンが `music.youtube.com/playlist?list=...` になります。
+
+公開範囲は `page.json` の `privacy` で変えられます（`UNLISTED` / `PUBLIC` / `PRIVATE`）。
+既定は `UNLISTED`（リンクを知っている人だけ見られる）です。
+
+### 設定しない場合
+
+認証情報が無ければこのステップは自動でスキップされ、これまでどおり
+「YouTube で一度保存 → ID を Actions のフォームに貼る」手順で運用できます。
+
 ## 共有用ランディングページ
 
 ワークフローが実行されるたびに、スマートリンク風のページを生成して
