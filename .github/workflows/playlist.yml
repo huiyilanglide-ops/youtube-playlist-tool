@@ -2,8 +2,8 @@ name: プレイリスト URL 生成
 
 # スマホからでも実行できるようにするためのワークフロー。
 #   - Actions タブの「Run workflow」で手動実行
-#   - songs.txt などを編集して commit すると自動で再実行
-# 結果はジョブのサマリーに表示される。
+#   - songs.txt / page.json を編集して commit すると自動で再実行
+# 結果はジョブのサマリーに表示され、ランディングページが GitHub Pages に公開される。
 
 on:
   workflow_dispatch:
@@ -13,21 +13,31 @@ on:
     paths:
       - ytm_playlist.py
       - to_summary.py
+      - make_page.py
       - songs.txt
+      - page.json
       - .github/workflows/playlist.yml
 
 permissions:
   contents: read
 
+concurrency:
+  group: playlist-pages
+  cancel-in-progress: false
+
 jobs:
   generate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -46,6 +56,11 @@ jobs:
         if: always()
         run: python to_summary.py >> "$GITHUB_STEP_SUMMARY"
 
+      - name: ランディングページを生成
+        env:
+          PAGE_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: python make_page.py --results out/results.json --config page.json --out site/index.html
+
       - name: 結果ファイルを保存
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,5 +68,43 @@ jobs:
           name: playlist-results
           path: |
             out/
+            site/
             run.log
           if-no-files-found: warn
+
+      - name: Pages の設定
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: ページをアップロード
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: generate
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: GitHub Pages に公開
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: サマリーに公開 URL を追記
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          {
+            echo "## 🔗 公開ページ"
+            echo ""
+            echo "### [$PAGE_URL]($PAGE_URL)"
+            echo ""
+            echo "このページを開くと「YouTube Music で開く」ボタンが出ます。"
+          } >> "$GITHUB_STEP_SUMMARY"

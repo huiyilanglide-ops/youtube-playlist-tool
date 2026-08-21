@@ -20,6 +20,45 @@
 
 認証は不要です(検索のみ使用)。
 
+## 共有用ランディングページ
+
+ワークフローが実行されるたびに、スマートリンク風のページを生成して
+GitHub Pages に公開します。
+
+```
+https://huiyilanglide-ops.github.io/youtube-playlist-tool/
+```
+
+ページには曲目一覧と、**「YouTube Music で開く」ボタン**があります。
+Android では `intent://` でアプリを名指しして起動し、開けなければブラウザに戻ります。
+iOS ではユニバーサルリンクでアプリに切り替わります。
+Instagram や LINE のアプリ内ブラウザで開かれた場合は、
+アプリに切り替わらない旨の警告を出します。
+
+見た目は `page.json` で変えられます。
+
+| キー | 用途 |
+|---|---|
+| `title` | ページの見出し |
+| `subtitle` | 見出しの下の説明 |
+| `accent` / `accent2` | グラデーションの 2 色 |
+| `playlist_id` | 保存済みプレイリストの ID(下記) |
+
+### アプリで開くボタンを有効にする
+
+`watch_videos` の URL は毎回その場かぎりのプレイリストを作る仕組みで、
+しかも `www.youtube.com` なので **YouTube アプリ**の側が開きます。
+YouTube Music アプリで開くには、一度だけ保存して固定の ID を得る必要があります。
+
+1. 公開ページの「YouTube で開いて保存する」を押す
+2. プレイリスト名の横の **「保存」** をタップ
+3. 保存されたプレイリストを開き、URL の `list=` 以降をコピー
+   （`PL` から始まる文字列。URL をまるごと貼っても構いません）
+4. `page.json` の `playlist_id` に貼り付けて commit
+
+これでワークフローが再実行され、ページのボタンが
+`https://music.youtube.com/playlist?list=...` に切り替わります。
+
 ## スマホから実行する(PC が無いとき)
 
 ### 方法 1: GitHub Actions(おすすめ・タップだけ)
@@ -121,6 +160,7 @@ python ytm_playlist.py --songs songs.txt
 - `results.csv` — 曲名 / アーティスト / videoId の一覧(Excel で開ける BOM 付き UTF-8)
 - `playlist_url.txt` — 生成された URL
 - `results.json` — 生の結果(要確認理由なども含む)
+- `site/index.html` — 共有用ランディングページ
 
 URL の形式:
 
