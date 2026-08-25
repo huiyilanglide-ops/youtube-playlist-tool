@@ -41,8 +41,20 @@ def main(argv=None) -> int:
         return 0
 
     if not ID_RE.match(playlist_id):
-        print(f"エラー: プレイリスト ID として解釈できません: {args.value!r}", file=sys.stderr)
-        print("        music.youtube.com のプレイリスト URL をそのまま貼ってください。", file=sys.stderr)
+        raw = args.value.strip()
+        looks_like_video = ("list=" not in raw) and any(
+            k in raw for k in ("youtu.be/", "watch?v=", "/watch", "/shorts/"))
+        print(f"エラー: プレイリスト ID として解釈できません: {raw!r}", file=sys.stderr)
+        if looks_like_video:
+            print("        これは動画 1 本のリンクです。プレイリストのリンクが必要です。",
+                  file=sys.stderr)
+            print("        再生中の画面から共有すると曲のリンクになります。",
+                  file=sys.stderr)
+            print("        ライブラリでプレイリストを開いてから共有してください。",
+                  file=sys.stderr)
+        print("        正しい形: https://music.youtube.com/playlist?list=PL...",
+              file=sys.stderr)
+        print("        （必ず list= が含まれます）", file=sys.stderr)
         return 1
 
     if playlist_id.startswith("TLGG"):
