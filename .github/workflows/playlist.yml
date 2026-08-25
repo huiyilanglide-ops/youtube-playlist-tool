@@ -24,6 +24,8 @@ on:
       - sync_playlist.py
       - verify_playlist.py
       - test_all.py
+      - fetch_playlist.py
+      - mode.py
       - songs.txt
       - page.json
       - .github/workflows/playlist.yml
@@ -71,8 +73,20 @@ jobs:
       - name: 全モジュールの自己テスト(ネットワーク不要)
         run: python test_all.py
 
+      # 曲目リストの供給元を決める。
+      #   playlist = 既存プレイリストの中身をそのまま使う(ずれが起きない)
+      #   songs    = songs.txt を検索して組み立てる
+      - name: モードを判定
+        id: mode
+        run: echo "source=$(python mode.py)" >> "$GITHUB_OUTPUT"
+
       - name: 検索して URL を生成
+        if: steps.mode.outputs.source == 'songs'
         run: python ytm_playlist.py --songs songs.txt --out-dir out 2>&1 | tee run.log
+
+      - name: プレイリストから曲目を取得
+        if: steps.mode.outputs.source == 'playlist'
+        run: python fetch_playlist.py --config page.json --out-dir out 2>&1 | tee run.log
 
       - name: サマリーに結果を出力
         if: always()
@@ -92,6 +106,7 @@ jobs:
         run: python sync_playlist.py --results out/results.json --config page.json
 
       - name: プレイリスト ID を解決
+        if: steps.mode.outputs.source == 'songs'
         continue-on-error: true
         run: python resolve_playlist.py --results out/results.json
 
@@ -103,6 +118,7 @@ jobs:
       # page.json の playlist_id を実際に取得し、実在するか・中身が
       # songs.txt と一致するかをサマリーに出す。認証は不要。
       - name: プレイリストを検証
+        if: steps.mode.outputs.source == 'songs'
         continue-on-error: true
         run: python verify_playlist.py --results out/results.json --config page.json
 

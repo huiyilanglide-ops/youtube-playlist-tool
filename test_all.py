@@ -16,7 +16,9 @@ import sys
 import tempfile
 from typing import List
 
+import fetch_playlist
 import make_page
+import mode
 import resolve_playlist
 import set_playlist
 import sync_playlist
@@ -200,7 +202,53 @@ def main() -> int:
             check(rendered["dialogs"] == 0, "ブラウザ: ダイアログが出ない")
             check(rendered["scripts"] == 1, "ブラウザ: script は本来の 1 個だけ")
 
-        section("8. 文字列正規化 (ytm_playlist)")
+        section("8. 供給元の判定 (mode)")
+        for cfg_d, want in [
+            ({}, "songs"),
+            ({"playlist_id": "PL123"}, "playlist"),
+            ({"playlist_id": "", "source": "playlist"}, "playlist"),
+            ({"playlist_id": "PL123", "source": "songs"}, "songs"),
+            ({"playlist_id": "PL1", "source": "でたらめ"}, "playlist"),
+        ]:
+            check(mode.detect(cfg_d) == want, f"detect({cfg_d}) -> {want}")
+
+        section("9. プレイリストの取り込み (fetch_playlist)")
+        sample = {
+            "title": "dopamine",
+            "tracks": [
+                {"videoId": "aaaaaaaaaaa", "title": "One",
+                 "artists": [{"name": "A"}, {"name": "B"}],
+                 "album": {"name": "Alb"}, "duration": "3:00"},
+                {"videoId": None, "title": "削除済み", "artists": []},
+                {"videoId": "bbbbbbbbbbb", "title": "Two",
+                 "artists": [{"name": "C"}], "album": None, "duration": "4:00"},
+            ],
+        }
+        res = fetch_playlist.to_results(sample, "PLxyz")
+        check(len(res["found"]) == 2, "videoId の無い曲を除外する")
+        check(res["found"][0]["artists"] == "A, B", "複数アーティストを連結する")
+        check(res["found"][1]["album"] == "", "アルバム未設定でも壊れない")
+        check(res["playlist_title"] == "dopamine", "プレイリスト名を取り込む")
+        check(res["urls"] == ["https://music.youtube.com/playlist?list=PLxyz"],
+              "URL がプレイリストを指す")
+        check(res["missing"] == [], "playlist モードに missing は無い")
+
+        # 取り込んだ結果がそのままページ生成に通ること
+        rj = os.path.join(tmp, "fetched.json")
+        with open(rj, "w", encoding="utf-8") as fh:
+            json.dump(res, fh)
+        cfg_pl = write_cfg(os.path.join(tmp, "pl.json"),
+                           playlist_id="PLxyz", source="playlist", title="dopamine")
+        out_pl = os.path.join(tmp, "pl.html")
+        check(make_page.main(["--results", rj, "--config", cfg_pl, "--out", out_pl]) == 0,
+              "取り込んだ結果からページを生成できる")
+        html_pl = open(out_pl, encoding="utf-8").read()
+        check("music.youtube.com/playlist?list=PLxyz" in html_pl, "ボタンがそのプレイリスト")
+        check(html_pl.count('class="track"') == 2, "曲数がプレイリストと一致")
+        check("dopamine" in html_pl, "タイトルが反映される")
+        check(not re.search(r"https://www\.youtube\.com", html_pl), "www.youtube.com が無い")
+
+        section("10. 文字列正規化 (ytm_playlist)")
         for got, want in [
             (M.norm("Don't Let Me Down"), "dont let me down"),
             (M.norm("It Ain’t Me"), "it aint me"),
