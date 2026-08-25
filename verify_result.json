@@ -1,0 +1,105 @@
+{
+  "checked_at": "32861700375",
+  "playlist_id": "PLdWPcRyOJTek",
+  "id_length": 13,
+  "status": "mismatch",
+  "playlist_title": "dopamine",
+  "playlist_count": 10,
+  "page_count": 10,
+  "matched": 0,
+  "same_order": false,
+  "missing": [
+    {
+      "videoId": "r7zTKRonHXM",
+      "title": "Closer (feat. Halsey)",
+      "artists": "The Chainsmokers"
+    },
+    {
+      "videoId": "owTWCbq_nSk",
+      "title": "Something Just Like This",
+      "artists": "The Chainsmokers, Coldplay"
+    },
+    {
+      "videoId": "CpTr4USXjQw",
+      "title": "Don't Let Me Down (feat. Daya)",
+      "artists": "The Chainsmokers"
+    },
+    {
+      "videoId": "Dfiw7EmRTC4",
+      "title": "Paris",
+      "artists": "The Chainsmokers"
+    },
+    {
+      "videoId": "5p1KZAp0H-g",
+      "title": "It Ain't Me",
+      "artists": "Kygo, Selena Gomez"
+    },
+    {
+      "videoId": "pIWaVJPl0-c",
+      "title": "Faded",
+      "artists": "Alan Walker"
+    },
+    {
+      "videoId": "vTMAa6zZ7jY",
+      "title": "7 Years",
+      "artists": "Lukas Graham"
+    },
+    {
+      "videoId": "rJ0D1GbDq1Q",
+      "title": "Let Me Love You (feat. Justin Bieber)",
+      "artists": "DJ Snake"
+    },
+    {
+      "videoId": "jEBKFudxGTs",
+      "title": "Cold Water (feat. Justin Bieber & MØ)",
+      "artists": "Major Lazer"
+    },
+    {
+      "videoId": "K_idN3P5_yk",
+      "title": "Cheap Thrills",
+      "artists": "Sia"
+    }
+  ],
+  "extra": [
+    {
+      "videoId": "x9p_t5-S_E4",
+      "title": "This Far (RudeLies Remix)"
+    },
+    {
+      "videoId": "ICSHtGMHAwQ",
+      "title": "Wicked Wonderland"
+    },
+    {
+      "videoId": "u5b0dGd-a0g",
+      "title": "Sea of Tranquility"
+    },
+    {
+      "videoId": "CcePzXrhaqs",
+      "title": "Run Free (Sped Up Version) (feat. IVIE)"
+    },
+    {
+      "videoId": "Pu1dK0OzIv4",
+      "title": "Maybe this Time"
+    },
+    {
+      "videoId": "_kBFFEWGBl4",
+      "title": "You"
+    },
+    {
+      "videoId": "X5TpRJ4Meks",
+      "title": "U Make Me (Asketa & Natan Chaim Remix)"
+    },
+    {
+      "videoId": "vAaW4OgdMF0",
+      "title": "Better Off Alone x Clarity (Remix)"
+    },
+    {
+      "videoId": "_pwPm_VHWHU",
+      "title": "Honeypie"
+    },
+    {
+      "videoId": "BYxVWVtiQHY",
+      "title": "Where Do I Go"
+    }
+  ]
+}
