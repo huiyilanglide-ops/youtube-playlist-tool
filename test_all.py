@@ -17,6 +17,8 @@ import tempfile
 from typing import List
 
 import fetch_playlist
+import import_source as I
+import reset_target
 import make_page
 import mode
 import resolve_playlist
@@ -248,7 +250,68 @@ def main() -> int:
         check("dopamine" in html_pl, "タイトルが反映される")
         check(not re.search(r"https://www\.youtube\.com", html_pl), "www.youtube.com が無い")
 
-        section("10. 文字列正規化 (ytm_playlist)")
+        section("10. 取り込み元の判定 (import_source)")
+        for v, want in [
+            ("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=x", "spotify"),
+            ("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "spotify"),
+            ("https://music.youtube.com/playlist?list=PLdWPcRyOJTek", "ytmusic"),
+            ("Closer - The Chainsmokers", "text"),
+            ("", "empty"),
+        ]:
+            check(I.detect_kind(v) == want, f"detect_kind -> {want}")
+        check(I.parse_spotify_id("https://open.spotify.com/playlist/ABC123?si=x") == "ABC123",
+              "Spotify の ID 抽出")
+        check(I.parse_spotify_id("https://open.spotify.com/track/ABC123") == "",
+              "曲の URL は ID として取らない")
+
+        section("11. 曲名リストの解釈 (import_source)")
+        for line, want in [
+            ("Closer / The Chainsmokers, Halsey", ("Closer", ["The Chainsmokers", "Halsey"])),
+            ("Closer - The Chainsmokers", ("Closer", ["The Chainsmokers"])),
+            ("Closer — The Chainsmokers", ("Closer", ["The Chainsmokers"])),
+            ("Cold Water - Major Lazer feat. Justin Bieber",
+             ("Cold Water", ["Major Lazer", "Justin Bieber"])),
+            ("1. Faded - Alan Walker", ("Faded", ["Alan Walker"])),
+            ("Cheap Thrills\tSia", ("Cheap Thrills", ["Sia"])),
+            ("Paris", ("Paris", [])),
+            ("# コメント", None),
+        ]:
+            check(I.parse_line(line) == want, f"parse_line({line[:38]!r})")
+        check(I.parse_line("The Chainsmokers - Closer", swap=True)
+              == ("Closer", ["The Chainsmokers"]), "swap で順序反転")
+
+        spotify_items = [
+            {"track": {"name": "Closer",
+                       "artists": [{"name": "The Chainsmokers"}, {"name": "Halsey"}]}},
+            {"track": None},
+            {"track": {"name": None, "artists": []}},
+            {"track": {"name": "Faded", "artists": [{"name": "Alan Walker"}]}},
+        ]
+        check(I.tracks_from_spotify_items(spotify_items)
+              == [("Closer", ["The Chainsmokers", "Halsey"]), ("Faded", ["Alan Walker"])],
+              "Spotify の削除済み/ローカル曲を除外")
+
+        # 生成した songs.txt を既存パーサが読み戻せること
+        st = os.path.join(tmp, "imported.txt")
+        with open(st, "w", encoding="utf-8") as fh:
+            fh.write(I.to_songs_txt([("Closer", ["The Chainsmokers", "Halsey"]),
+                                     ("Paris", [])], "test"))
+        back = M.load_songs(st)
+        check(len(back) == 2, "生成した songs.txt を読み戻せる")
+        check(back[0].artists == ["The Chainsmokers", "Halsey"], "アーティストが保持される")
+        check(back[1].artists == [], "アーティスト無しも扱える")
+
+        section("12. 上書き事故の防止 (reset_target)")
+        new_cfg, prev = reset_target.reset(
+            {"playlist_id": "PLexisting", "source": "playlist", "title": "dopamine"})
+        check(new_cfg["playlist_id"] == "", "取り込み時に playlist_id を外す")
+        check(new_cfg["source"] == "songs", "songs モードに切り替える")
+        check(new_cfg["previous_playlist_id"] == "PLexisting", "元の ID を控える")
+        check(new_cfg["title"] == "dopamine", "他の設定は残す")
+        n2, p2 = reset_target.reset({"playlist_id": "", "source": "songs"})
+        check("previous_playlist_id" not in n2 and p2 == "", "未設定なら控えない")
+
+        section("13. 文字列正規化 (ytm_playlist)")
         for got, want in [
             (M.norm("Don't Let Me Down"), "dont let me down"),
             (M.norm("It Ain’t Me"), "it aint me"),

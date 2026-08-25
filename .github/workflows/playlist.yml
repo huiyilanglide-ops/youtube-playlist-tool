@@ -12,6 +12,10 @@ on:
         description: 'YouTube Music のプレイリスト URL（空欄なら現状のまま）'
         required: false
         default: ''
+      import_from:
+        description: '取り込み元: Spotify / YouTube Music のプレイリスト URL、または曲名リスト'
+        required: false
+        default: ''
   push:
     branches:
       - claude/youtube-music-playlist-url-mvqupl
@@ -26,6 +30,7 @@ on:
       - test_all.py
       - fetch_playlist.py
       - mode.py
+      - import_source.py
       - songs.txt
       - page.json
       - .github/workflows/playlist.yml
@@ -56,6 +61,19 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
+      # 他サービスのプレイリストや曲名リストを songs.txt に取り込む。
+      # 既存の playlist_id は必ず消す。残したまま進むと、取り込んだ曲で
+      # 既存プレイリストを上書きしてしまうため。
+      - name: 他サービスから取り込み
+        if: inputs.import_from != ''
+        env:
+          IMPORT_FROM: ${{ inputs.import_from }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+        run: |
+          python import_source.py --source "$IMPORT_FROM" --out songs.txt
+          python reset_target.py --config page.json
 
       # Actions の入力欄に貼られたプレイリスト URL を page.json に反映する。
       # スマホからファイルを編集せずに設定できるようにするため。
@@ -127,7 +145,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add page.json verify_result.json
+          git add page.json verify_result.json songs.txt
           if git diff --staged --quiet; then
             echo "変更なし"
           else

@@ -20,6 +20,50 @@
 
 認証は不要です(検索のみ使用)。
 
+## 他サービスのプレイリストを取り込む
+
+Spotify のプレイリスト URL、曲名の羅列、YouTube Music のプレイリスト URL のいずれかを
+渡すと、同じ内容のプレイリストを自分の YouTube Music 側に作れます。
+
+[Run workflow](https://github.com/huiyilanglide-ops/youtube-playlist-tool/actions/workflows/playlist.yml)
+の **取り込み元** 欄に貼るだけです。
+
+| 貼るもの | 例 | 必要なもの |
+|---|---|---|
+| Spotify のプレイリスト | `https://open.spotify.com/playlist/...` | Secret 2 つ（下記） |
+| 曲名の羅列 | `Closer - The Chainsmokers`（改行区切り） | なし |
+| YouTube Music のプレイリスト | `https://music.youtube.com/playlist?list=...` | なし |
+
+曲名の羅列は、どのサービスからコピーしても大体そのまま通ります。
+
+```
+1. Closer - The Chainsmokers
+2. Faded — Alan Walker
+Cold Water - Major Lazer feat. Justin Bieber
+Cheap Thrills	Sia
+Paris
+```
+
+連番、`-` / `—` / タブ / `/` 区切り、`feat.` の展開に対応しています。
+「アーティスト - 曲名」の順で書かれている場合は `import_source.py --swap` を使ってください。
+
+取り込んだあとは通常どおり、各曲の YouTube Music の**楽曲（Art Track）**を検索して
+特定します。MV・カバー・カラオケ・同名異曲は除外されます。
+
+> **取り込むと `playlist_id` は自動で外れます。** 残したまま進むと、取り込んだ曲で
+> 既存プレイリストを上書きしてしまうためです。元の ID は `previous_playlist_id` に
+> 控えるので、戻したい場合はそこから復元できます。
+
+### Spotify の設定（初回だけ・無料）
+
+[developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) でアプリを作り、
+**Client ID** と **Client secret** を
+[Secrets](https://github.com/huiyilanglide-ops/youtube-playlist-tool/settings/secrets/actions)
+に `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` として登録します。
+
+ユーザーのログインや同意は不要です（公開プレイリストを読むだけ）。
+Google の OAuth と違い、値を 2 つコピーするだけで終わります。
+
 ## 2 つのモード
 
 `page.json` の `source` で、ページに載せる曲目をどこから取るかが決まります。
