@@ -110,11 +110,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add page.json
+          git add page.json verify_result.json
           if git diff --staged --quiet; then
             echo "変更なし"
           else
-            git commit -m "Update playlist id [skip ci]"
+            git commit -m "Update playlist id and verification result [skip ci]"
             git push
           fi
 

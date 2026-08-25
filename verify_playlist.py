@@ -56,7 +56,19 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="プレイリスト ID を実際に取得して検証する")
     p.add_argument("--results", default="out/results.json")
     p.add_argument("--config", default="page.json")
+    p.add_argument("--out", default="verify_result.json",
+                   help="検証結果の保存先(リポジトリに記録として残す)")
     args = p.parse_args(argv)
+
+    verdict: Dict = {"checked_at": os.environ.get("GITHUB_RUN_ID", "local")}
+
+    def save() -> None:
+        try:
+            with open(args.out, "w", encoding="utf-8") as fh:
+                json.dump(verdict, fh, ensure_ascii=False, indent=2)
+                fh.write("\n")
+        except OSError as exc:
+            print(f"検証結果を保存できませんでした: {exc}")
 
     with open(args.config, encoding="utf-8") as fh:
         cfg = json.load(fh)
@@ -64,6 +76,8 @@ def main(argv=None) -> int:
 
     if not playlist_id:
         print("playlist_id が未設定のため検証をスキップします。")
+        verdict.update(status="skipped", reason="playlist_id が未設定")
+        save()
         return 0
 
     with open(args.results, encoding="utf-8") as fh:
@@ -73,6 +87,7 @@ def main(argv=None) -> int:
     by_id = {str(m.get("videoId")): m for m in found}
 
     print(f"検証対象: {playlist_id} ({len(playlist_id)} 文字)")
+    verdict.update(playlist_id=playlist_id, id_length=len(playlist_id))
 
     out: List[str] = ["", "## 🔍 プレイリストの検証", ""]
 
@@ -83,6 +98,8 @@ def main(argv=None) -> int:
     except Exception as exc:                       # noqa: BLE001
         name = type(exc).__name__
         print(f"取得できませんでした: {name}: {exc}")
+        verdict.update(status="unreachable", error=f"{name}: {exc}"[:400])
+        save()
         out += [
             f"❌ **`{playlist_id}` を取得できませんでした**",
             "",
@@ -107,6 +124,21 @@ def main(argv=None) -> int:
     print(f"  タイトル: {title}")
     print(f"  曲数: {cmp['playlist_count']} (期待 {cmp['target_count']})")
     print(f"  一致: {len(cmp['matched'])} / 不足: {len(cmp['missing'])} / 余分: {len(cmp['extra'])}")
+    verdict.update(
+        status="ok" if cmp["same_set"] else "mismatch",
+        playlist_title=title,
+        playlist_count=cmp["playlist_count"],
+        page_count=cmp["target_count"],
+        matched=len(cmp["matched"]),
+        same_order=cmp["same_order"],
+        missing=[{"videoId": v,
+                  "title": by_id.get(v, {}).get("title", ""),
+                  "artists": by_id.get(v, {}).get("artists", "")} for v in cmp["missing"]],
+        extra=[{"videoId": v,
+                "title": (next((t for t in tracks if t.get("videoId") == v), {}) or {}).get("title", "")}
+               for v in cmp["extra"][:30]],
+    )
+    save()
 
     out += [
         f"✅ **`{playlist_id}` は実在します**",
