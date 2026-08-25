@@ -117,8 +117,9 @@ jobs:
 
       # page.json の playlist_id を実際に取得し、実在するか・中身が
       # songs.txt と一致するかをサマリーに出す。認証は不要。
+      # playlist モードでも走らせる。生成したページとプレイリストを
+      # 独立に取り直して突き合わせるので、取り込みの回帰チェックになる。
       - name: プレイリストを検証
-        if: steps.mode.outputs.source == 'songs'
         continue-on-error: true
         run: python verify_playlist.py --results out/results.json --config page.json
 
