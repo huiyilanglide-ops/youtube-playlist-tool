@@ -22,6 +22,8 @@ on:
       - resolve_playlist.py
       - set_playlist.py
       - sync_playlist.py
+      - verify_playlist.py
+      - test_all.py
       - songs.txt
       - page.json
       - .github/workflows/playlist.yml
@@ -66,8 +68,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install ytmusicapi
 
-      - name: ロジックの自己テスト(ネットワーク不要)
-        run: python test_offline.py
+      - name: 全モジュールの自己テスト(ネットワーク不要)
+        run: python test_all.py
 
       - name: 検索して URL を生成
         run: python ytm_playlist.py --songs songs.txt --out-dir out 2>&1 | tee run.log
@@ -97,6 +99,12 @@ jobs:
         env:
           PAGE_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: python make_page.py --results out/results.json --config page.json --out site/index.html
+
+      # page.json の playlist_id を実際に取得し、実在するか・中身が
+      # songs.txt と一致するかをサマリーに出す。認証は不要。
+      - name: プレイリストを検証
+        continue-on-error: true
+        run: python verify_playlist.py --results out/results.json --config page.json
 
       - name: page.json をコミット
         run: |

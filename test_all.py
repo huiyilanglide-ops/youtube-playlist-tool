@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+全モジュールのオフライン検証。ネットワーク不要。
+
+    python test_all.py
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from typing import List
+
+import make_page
+import resolve_playlist
+import set_playlist
+import sync_playlist
+import verify_playlist
+import ytm_playlist as M
+import test_offline as T
+
+FAILS: List[str] = []
+
+
+def check(cond: bool, label: str) -> None:
+    if cond:
+        print(f"  ok   {label}")
+    else:
+        print(f"  FAIL {label}")
+        FAILS.append(label)
+
+
+def section(name: str) -> None:
+    print(f"\n--- {name} ---")
+
+
+def make_results(tmp: str) -> str:
+    songs = [M.Song(t, list(a)) for t, a in M.DEFAULT_SONGS]
+    found, missing = M.run_lookup(songs, T.fake_searcher, 10, lambda _m: None)
+    M.save_outputs(found, missing, tmp, lambda _m: None)
+    return os.path.join(tmp, "results.json")
+
+
+def write_cfg(path: str, **over) -> str:
+    cfg = {"title": "T", "subtitle": "S", "accent": "#111", "accent2": "#222",
+           "playlist_id": "", "privacy": "UNLISTED"}
+    cfg.update(over)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh)
+    return path
+
+
+def render_check(path: str):
+    """実ブラウザで開いて、注入されたタグやダイアログが無いことを確かめる。
+
+    playwright が無い環境（CI など）では None を返してスキップする。
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    exe = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
+    if not os.path.exists(exe):
+        return None
+
+    dialogs = []
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(executable_path=exe)
+        pg = b.new_page()
+        pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+        pg.goto("file://" + os.path.abspath(path))
+        pg.wait_for_timeout(300)
+        counts = pg.evaluate("""() => ({
+            imgs: document.querySelectorAll('img').length,
+            scripts: document.querySelectorAll('script').length
+        })""")
+        b.close()
+    counts["dialogs"] = len(dialogs)
+    return counts
+
+
+def main() -> int:
+    tmp = tempfile.mkdtemp(prefix="ytmtest-")
+    try:
+        results = make_results(tmp)
+
+        section("1. 曲の照合 (ytm_playlist)")
+        rc = subprocess.run([sys.executable, "test_offline.py"],
+                            capture_output=True, text=True).returncode
+        check(rc == 0, "test_offline.py が通る（MV/カラオケ/カバー/同名異曲を除外）")
+
+        section("2. プレイリスト URL の抽出 (set_playlist)")
+        for value, want in [
+            ("https://music.youtube.com/playlist?list=PLabc1234567&si=x", "PLabc1234567"),
+            ("https://www.youtube.com/playlist?list=PLxyz9876543210", "PLxyz9876543210"),
+            ("PLbare1234567890", "PLbare1234567890"),
+            ("", ""),
+        ]:
+            check(set_playlist.extract(value) == want, f"extract({value[:42]!r})")
+
+        cfg = write_cfg(os.path.join(tmp, "p.json"))
+        for value, want_rc, label in [
+            ("https://youtu.be/x9p_t5-S_E4?si=abc", 1, "動画リンクを拒否"),
+            ("https://www.youtube.com/watch?v=abcdefghijk", 1, "watch リンクを拒否"),
+            ("https://music.youtube.com/playlist?list=TLGGabcdefghij", 1, "一時プレイリストを拒否"),
+            ("!!!short!!!", 1, "不正な文字列を拒否"),
+            ("https://music.youtube.com/playlist?list=PL" + "a" * 32, 0, "正しい ID を受理"),
+        ]:
+            r = subprocess.run([sys.executable, "set_playlist.py", "--config", cfg,
+                                "--value", value], capture_output=True, text=True)
+            check(r.returncode == want_rc, label)
+
+        r = subprocess.run([sys.executable, "set_playlist.py", "--config", cfg,
+                            "--value", "PLdWPcRyOJTek"], capture_output=True, text=True)
+        check(r.returncode == 0 and "警告" in r.stdout, "短い ID は受理しつつ警告を出す")
+
+        section("3. リダイレクトからの ID 抽出 (resolve_playlist)")
+        for url, want in [
+            ("https://www.youtube.com/watch?v=a&list=TLGGtest1234567890", "TLGGtest1234567890"),
+            ("https://www.youtube.com/watch?v=a", ""),
+            ("https://www.youtube.com/watch?v=a&list=short", ""),
+        ]:
+            check(resolve_playlist.extract_list_id(url) == want, f"extract_list_id({url[-28:]})")
+
+        section("4. プレイリストの差分計算 (sync_playlist)")
+        for cur, tgt, wa, wr in [
+            (["a", "b", "c"], ["a", "b", "c"], [], []),
+            (["a", "b"], ["a", "b", "c"], ["c"], []),
+            (["a", "b", "c"], ["a", "c"], [], ["b"]),
+            ([], ["a"], ["a"], []),
+            (["a", "a", "b"], ["a", "b"], [], []),
+        ]:
+            add, rem = sync_playlist.plan_changes(cur, tgt)
+            check((add, rem) == (wa, wr), f"plan_changes({cur} -> {tgt})")
+
+        section("5. プレイリスト照合 (verify_playlist)")
+        c = verify_playlist.compare(["a", "b", "c"], ["a", "b", "c"])
+        check(c["same_set"] and c["same_order"], "完全一致を検出")
+        c = verify_playlist.compare(["c", "b", "a"], ["a", "b", "c"])
+        check(c["same_set"] and not c["same_order"], "曲順違いを検出")
+        c = verify_playlist.compare(["a", "b"], ["a", "b", "c"])
+        check(c["missing"] == ["c"] and not c["extra"], "不足を検出")
+        c = verify_playlist.compare(["a", "b", "z"], ["a", "b"])
+        check(c["extra"] == ["z"] and not c["missing"], "余分を検出")
+
+        section("6. ページ生成 (make_page)")
+        # 6a. playlist_id 設定済み
+        cfg_set = write_cfg(os.path.join(tmp, "set.json"),
+                            playlist_id="https://music.youtube.com/playlist?list=PLzz1234567890&si=q")
+        out_set = os.path.join(tmp, "set.html")
+        rc = make_page.main(["--results", results, "--config", cfg_set, "--out", out_set])
+        html_set = open(out_set, encoding="utf-8").read()
+        check(rc == 0, "設定済みモードで生成できる")
+        check("music.youtube.com/playlist?list=PLzz1234567890" in html_set,
+              "ボタンがプレイリストを指す")
+        check("PLzz1234567890&si=q" not in html_set, "URL の余計なパラメータを落とす")
+        check(not re.search(r'https://www\.youtube\.com', html_set),
+              "www.youtube.com が 1 つも無い")
+        check("watch_videos" not in html_set, "watch_videos が残っていない")
+
+        # 6b. 未設定（section 2 で cfg を書き換えているので新しく作る）
+        cfg_unset = write_cfg(os.path.join(tmp, "unset.json"))
+        out_unset = os.path.join(tmp, "unset.html")
+        make_page.main(["--results", results, "--config", cfg_unset, "--out", out_unset])
+        html_unset = open(out_unset, encoding="utf-8").read()
+        check("プレイリストを作成" in html_unset, "未設定時はセットアップ導線を出す")
+        check("music.youtube.com/watch?v=" in html_unset, "1曲目は YouTube Music を指す")
+
+        # 6c. 共通
+        for name, html in (("設定済み", html_set), ("未設定", html_unset)):
+            check(not re.search(r"\$\{?[a-zA-Z_]+\}?", html), f"{name}: 未置換の変数が無い")
+            check(html.count('class="track"') == 9, f"{name}: 曲数が一致")
+            check("{save_url}" not in html, f"{name}: save_url が置換済み")
+            check(html.count("</script>") == 1, f"{name}: script が閉じている")
+
+        section("7. エスケープ (make_page)")
+        cfg_evil = write_cfg(os.path.join(tmp, "evil.json"),
+                             title='</title><script>alert(1)</script>',
+                             subtitle='"><img src=x onerror=alert(2)>')
+        out_evil = os.path.join(tmp, "evil.html")
+        make_page.main(["--results", results, "--config", cfg_evil, "--out", out_evil])
+        html_evil = open(out_evil, encoding="utf-8").read()
+        head = html_evil[:html_evil.index("<style")]
+        check("<script>alert(1)</script>" not in head, "title に生のタグが入らない")
+        check("&lt;script&gt;" in head, "title はエスケープされている")
+        check("<img" not in html_evil, "subtitle に生のタグが入らない")
+        check("&lt;img" in html_evil, "subtitle はエスケープされている")
+        check('content="">' not in html_evil, "属性から抜け出せない")
+
+        rendered = render_check(out_evil)
+        if rendered is None:
+            print("  skip 実ブラウザでの検証（playwright 未導入）")
+        else:
+            check(rendered["imgs"] == 0, "ブラウザ: img 要素が生成されない")
+            check(rendered["dialogs"] == 0, "ブラウザ: ダイアログが出ない")
+            check(rendered["scripts"] == 1, "ブラウザ: script は本来の 1 個だけ")
+
+        section("8. 文字列正規化 (ytm_playlist)")
+        for got, want in [
+            (M.norm("Don't Let Me Down"), "dont let me down"),
+            (M.norm("It Ain’t Me"), "it aint me"),
+            (M.norm("MØ"), "mo"),
+            (M.norm("A & B"), "a and b"),
+            (M.base_title("Closer (feat. Halsey)").strip(), "Closer"),
+        ]:
+            check(got == want, f"norm -> {want!r}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    print()
+    if FAILS:
+        print(f"失敗 {len(FAILS)} 件:")
+        for f in FAILS:
+            print("  -", f)
+        return 1
+    print("すべて成功しました。")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
