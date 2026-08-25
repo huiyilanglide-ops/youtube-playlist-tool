@@ -63,6 +63,14 @@ def main(argv=None) -> int:
         print("        保存されたプレイリストの URL を使ってください。", file=sys.stderr)
         return 1
 
+    # YouTube のプレイリスト ID は PL+16 か PL+32 が一般的。
+    # 外れていてもエラーにはしないが、コピー漏れの可能性を伝える。
+    if playlist_id.startswith("PL") and len(playlist_id) not in (18, 34):
+        print(f"警告: ID の長さが一般的な形と違います ({len(playlist_id)} 文字)。")
+        print("      通常は 18 文字 (PL+16) か 34 文字 (PL+32) です。")
+        print("      コピーが途中で切れていないか確認してください。")
+        print("      このまま設定は続けます。")
+
     with open(args.config, encoding="utf-8") as fh:
         cfg = json.load(fh)
 
